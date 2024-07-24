@@ -1,5 +1,7 @@
-import sympy as sp  # Symbolic mathematics for manipulating expressions
+from itertools import chain, combinations, combinations_with_replacement, product
+import numpy as np
 import networkx as nx
+import sympy as sp  # Symbolic mathematics for manipulating expressions
 from typing import Tuple, Union
 
 
@@ -265,3 +267,136 @@ class ExprGraphProcessor:
                 return handler(_expr_, _graph_, side_flag)
 
         raise ValueError(f"Unsupported expression type: {_expr_}")
+
+
+class ExprGenerator:
+    """
+    A class to generate sympy expressions.
+    """
+
+    def __init__(self, sub_expressions: list = None):
+        """
+        Initialize the ExpressionGenerator.
+
+        Args:
+            sub_expressions (list): List of subexpressions to use in expressions.
+        """
+        if sub_expressions is None:
+            sub_expressions = [sp.Symbol('_x_')]
+        if hasattr(sub_expressions, '__iter__'):
+            self.sub_expressions = np.array(sub_expressions)
+        else:
+            self.sub_expressions = np.array([sub_expressions])
+
+        self._generate_polynomials()
+        self._generate_trigonometric()
+        self._generate_hyperbolic()
+        self._generate_exponential()
+
+    @staticmethod
+    def _powerset(iterable):
+        """
+        Generate powerset from an iterable and return as a list
+
+        Args:
+            iterable: any iterable
+
+        return:
+            powerset (list): List of powerset of iterable
+        """
+        return [list(__) for __ in chain.from_iterable(
+            combinations(iterable, sub_iterable) for sub_iterable in range(1, len(iterable) + 1))]
+
+    def _generate_polynomials(self, max_degree: int = 3, all_terms: bool = False, cross_terms: bool = False):
+        """
+        Generate a list of sympy polynomial expressions
+
+        Args:
+            max_degree (int): Int of highest order polynomial term
+            all_terms (bool): Boolean flagging whether to include lower order terms
+            cross_terms (bool): Boolean flagging whether to include cross-terms
+        """
+        poly_list = []
+
+        # Generate single variable polynomials
+        for expr in self.sub_expressions:
+            for degree in range(1, max_degree + 1):
+                poly_list.append(expr**degree)
+
+        if all_terms:
+            if cross_terms:
+                # Generate cross terms without exceeding max_degree
+                for degrees in product(range(max_degree + 1), repeat=len(self.sub_expressions)):
+                    if 0 < sum(degrees) <= max_degree:
+                        term = sp.Mul(*[expr**deg for expr, deg in zip(self.sub_expressions, degrees)])
+                        poly_list.append(term)
+            else:
+                for degree in range(1, max_degree + 1):
+                    for terms in combinations_with_replacement(self.sub_expressions, degree):
+                        poly_list.append(sp.Mul(*terms))
+
+        self.poly_list = [sum(_expr_) for _expr_ in self._powerset(poly_list)]
+
+    def _generate_trigonometric(self):
+        """
+        Generate a list of sympy trigonometric expressions
+        """
+        trig_func_list = [sp.sin, sp.cos, sp.tan, sp.csc, sp.sec, sp.cot]
+        inv_trig_func_list = [sp.asin, sp.acos, sp.atan, sp.acsc, sp.asec, sp.acot]
+        func_list = trig_func_list + inv_trig_func_list
+        trig_list = []
+        for _expr_ in self.sub_expressions:
+            for func in func_list:
+                trig_list.append(func(_expr_))
+        self.trig_list = trig_list
+
+    def _generate_hyperbolic(self):
+        """
+        Generate a list of sympy hyperbolic trigonometric expressions
+        """
+        trig_func_list = [sp.sinh, sp.cosh, sp.tanh, sp.csch, sp.sech, sp.coth]
+        inv_trig_func_list = [sp.asinh, sp.acosh, sp.atanh, sp.acsch, sp.asech, sp.acoth]
+        func_list = trig_func_list + inv_trig_func_list
+        hyper_list = []
+        for _expr_ in self.sub_expressions:
+            for func in func_list:
+                hyper_list.append(func(_expr_))
+        self.hyper_list = hyper_list
+
+    def _generate_exponential(self):
+        """
+        Generate a list of sympy exponential/logarithmic expressions
+        """
+        exp_list = []
+        func_list = [sp.exp, sp.LambertW ,sp.log]
+        for _expr_ in self.sub_expressions:
+            for func in func_list:
+                exp_list.append(func(_expr_))
+            for __expr__ in self.sub_expressions:
+                exp_list.append(_expr_**__expr__)
+            exp_list.append(2**_expr_)
+        self.exp_list = exp_list
+
+    def get_polynomials(self):
+        """
+        returns the base list of polynomials
+        """
+        return self.poly_list
+
+    def get_trigonometric(self):
+        """
+        return the base list of trigonometric functions
+        """
+        return self.trig_list
+
+    def get_hyperbolic(self):
+        """
+        return the base list of hyper trigonometric functions
+        """
+        return self.hyper_list
+
+    def get_exponential(self):
+        """
+        return the base list of exponential/logarithmic functions
+        """
+        return self.exp_list
