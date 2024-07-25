@@ -400,3 +400,63 @@ class ExprGenerator:
         return the base list of exponential/logarithmic functions
         """
         return self.exp_list
+
+
+class GraphToExprConverter:
+    """
+    A class to convert a NetworkX graph back into a sympy expression.
+    """
+
+    def __init__(self):
+        pass
+
+    def graph_to_expr(self, graph: nx.DiGraph, node: int = 0) -> sp.Basic:
+        """
+        Converts a graph back into a sympy expression.
+
+        Args:
+            graph (nx.DiGraph): The graph representing the expression.
+            node (int): The current node to process.
+
+        Returns:
+            sp.Basic: The corresponding sympy expression.
+        """
+        node_data = graph.nodes[node]
+        label = node_data['label']
+        if 'operator' in node_data:
+            operator = node_data['operator']
+            children = list(graph.successors(node))
+
+            if operator == '=':
+                lhs = self.graph_to_expr(graph, children[0])
+                rhs = self.graph_to_expr(graph, children[1])
+                return sp.Eq(lhs, rhs)
+            elif operator == '+':
+                return sp.Add(*[self.graph_to_expr(graph, child) for child in children])
+            elif operator == '*':
+                return sp.Mul(*[self.graph_to_expr(graph, child) for child in children])
+            elif operator == '**':
+                base = self.graph_to_expr(graph, children[0])
+                exp = self.graph_to_expr(graph, children[1])
+                return sp.Pow(base, exp)
+            elif operator == 'Derivative':
+                expr = self.graph_to_expr(graph, children[0])
+                variables = [self.graph_to_expr(graph, child) for child in children[1:]]
+                return sp.Derivative(expr, *variables)
+            elif operator == 'Integral':
+                expr = self.graph_to_expr(graph, children[0])
+                variables = [self.graph_to_expr(graph, child) for child in children[1:]]
+                return sp.Integral(expr, *variables)
+            else:
+                raise ValueError(f"Unsupported operator: {operator}")
+        elif 'symbol' in node_data:
+            return sp.Symbol(label.split(': ')[1])
+        elif 'number' in node_data:
+            return sp.sympify(label.split(': ')[1])
+        elif 'func' in node_data:
+            func = node_data['func']
+            args = [self.graph_to_expr(graph, child) for child in graph.successors(node)]
+            return func(*args)
+        else:
+            raise ValueError(f"Unsupported node data: {node_data}")
+        

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt  # Data visualization and plotting
 import networkx as nx
 import sympy as sp  # Symbolic mathematics for manipulating expressions
-from utils import ExprGraphProcessor
+from utils import ExprGraphProcessor, graph_to_expr
 
 # Example usage
 if __name__ == "__main__":
@@ -18,3 +18,7 @@ if __name__ == "__main__":
     labels = nx.get_node_attributes(graph, 'label')
     nx.draw(graph, pos=pos, with_labels=True, labels=labels, arrows=True, font_size=10, font_color='black')
     plt.show()
+
+    root_node = 0  # Adjust this according to the actual root node of your graph
+    reconstructed_expr = converter.graph_to_expr(graph, root_node)
+    print(reconstructed_expr)
