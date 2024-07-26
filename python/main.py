@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt  # Data visualization and plotting
 import networkx as nx
 import sympy as sp  # Symbolic mathematics for manipulating expressions
-from utils import ExprGraphProcessor, graph_to_expr
+from utils import ExprGraphProcessor, GraphToExprConverter
 
 # Example usage
 if __name__ == "__main__":
     x, y, z = sp.symbols('x y z')
-    expr = sp.Eq(sp.Derivative(y * x, x, y) + x, y + z + sp.sin(x))
+    F = sp.Function('F')
+    expr = sp.Eq(sp.Derivative(y * x, x, y) + x, y + z + sp.sin(x) - F(x))
 
     # Initialize the graph processor and process the expression
     graph = nx.DiGraph()
@@ -20,5 +21,7 @@ if __name__ == "__main__":
     plt.show()
 
     root_node = 0  # Adjust this according to the actual root node of your graph
+    converter = GraphToExprConverter()
     reconstructed_expr = converter.graph_to_expr(graph, root_node)
     print(reconstructed_expr)
+    print(sp.Eq(expr.lhs-reconstructed_expr.lhs, expr.rhs-reconstructed_expr.rhs))
