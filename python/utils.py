@@ -410,7 +410,7 @@ class GraphToExprConverter:
     def __init__(self):
         pass
 
-    def graph_to_expr(self, graph: nx.DiGraph, node: int):
+    def graph_to_expr(self, graph: nx.DiGraph, node: int) -> sp.Basic:
         """
         Converts a graph back into a sympy expression.
 
@@ -422,62 +422,79 @@ class GraphToExprConverter:
             sp.Basic: The corresponding sympy expression.
         """
 
-        node_data = graph.nodes[node]
-        label = node_data.get('label', '')
-        predecessors = list(graph.predecessors(node))
-        successors = list(graph.successors(node))
+        def arithmatic_operator(_graph_: nx.DiGraph, _identity_: sp.Basic, _operator_: callable) -> sp.Basic:
+            """
+            Handle arithmetic operators such as addition and multiplication.
+
+            Args:
+                _graph_ (nx.DiGraph): The graph representing the expression.
+                _identity_ (sp.Basic): The identity element for the operator.
+                _operator_ (callable): The sympy function for the operator (e.g., sp.Add, sp.Mul).
+
+            Returns:
+                sp.Basic: The sympy expression for the arithmetic operation.
+            """
+            if len(predecessors) == 0:
+                return _identity_
+            terms = [self.graph_to_expr(_graph_, predecessor) for predecessor in predecessors]
+            return _operator_(*terms)
+
+        def calculus_operator(_graph_: nx.DiGraph, str_operator: str, _operator_: callable) -> sp.Basic:
+            """
+            Handle calculus operators such as derivatives and integrals.
+
+            Args:
+                _graph_ (nx.DiGraph): The graph representing the expression.
+                str_operator (str): The string name of the operator.
+                _operator_ (callable): The sympy function for the operator (e.g., sp.Derivative, sp.Integral).
+
+            Returns:
+                sp.Basic: The sympy expression for the calculus operation.
+            """
+            if len(predecessors) != 1:
+                raise ValueError(f"{str_operator} node should have exactly 1 predecessor, got {len(predecessors)}")
+            if len(successors) < 2:
+                raise ValueError(f"{str_operator} node should have at least 2 successors, got {len(successors)}")
+            expr_node = predecessors[0]
+            variables = [successor for successor in successors if successor != min(successors, key=abs)]
+            expr = self.graph_to_expr(_graph_, expr_node)
+            vars_expressions = [self.graph_to_expr(_graph_, var_node) for var_node in variables]
+            return _operator_(expr, *vars_expressions)
+
+        def handle_equality() -> sp.Basic:
+            if len(predecessors) != 2:
+                raise ValueError(f"Equality node should have exactly 2 predecessors, got {len(predecessors)}")
+            lhs = self.graph_to_expr(graph, predecessors[0])
+            rhs = self.graph_to_expr(graph, predecessors[1])
+            return sp.Eq(lhs, rhs)
+
+        def handle_power() -> sp.Basic:
+            if len(predecessors) != 1:
+                raise ValueError(f"Power node should have exactly 1 predecessor, got {len(predecessors)}")
+            if len(successors) != 2:
+                raise ValueError(f"Power node should have exactly 2 successors, got {len(successors)}")
+            base = self.graph_to_expr(graph, max(successors, key=abs))
+            exp = self.graph_to_expr(graph, predecessors[0])
+            return sp.Pow(base, exp)
+
+        operator_handlers = {
+            '=': handle_equality,
+            '+': lambda: arithmatic_operator(graph, sp.S.Zero, sp.Add),
+            '*': lambda: arithmatic_operator(graph, sp.S.One, sp.Mul),
+            '**': handle_power,
+            'Derivative': lambda: calculus_operator(graph, 'Derivative', sp.Derivative),
+            'Integral': lambda: calculus_operator(graph, 'Integral', sp.Integral)
+        }
+
+        node_data: dict = graph.nodes[node]
+        label: str = node_data.get('label', '')
+        predecessors: list[int] = list(graph.predecessors(node))
+        successors: list[int] = list(graph.successors(node))
+
         if 'operator' in node_data:
-            operator = node_data['operator']
-            if operator == '=':
-                if len(predecessors) != 2:
-                    raise ValueError(f"Equality node should have exactly 2 predecessors, got {len(predecessors)}")
-                lhs = self.graph_to_expr(graph, predecessors[0])
-                rhs = self.graph_to_expr(graph, predecessors[1])
-                return sp.Eq(lhs, rhs)
-
-            elif operator == '+':
-                if len(predecessors) == 0:
-                    return sp.S.Zero
-                terms = [self.graph_to_expr(graph, predecessor) for predecessor in predecessors]
-                return sp.Add(*terms)
-
-            elif operator == '*':
-                if len(predecessors) == 0:
-                    return sp.S.One
-                factors = [self.graph_to_expr(graph, predecessor) for predecessor in predecessors]
-                return sp.Mul(*factors)
-
-            elif operator == '**':
-                if len(predecessors) != 1:
-                    raise ValueError(f"Power node should have exactly 1 predecessor, got {len(predecessors)}")
-                if len(successors) != 2:
-                    raise ValueError(f"Power node should have exactly 2 successors, got {len(successors)}")
-                base = self.graph_to_expr(graph, max(successors, key=abs))
-                exp = self.graph_to_expr(graph, predecessors[0])
-                return sp.Pow(base, exp)
-
-            elif operator == 'Derivative':
-                if len(predecessors) != 1:
-                    raise ValueError(f"Derivative node should have exactly 1 predecessor, got {len(predecessors)}")
-                if len(successors) < 2:
-                    raise ValueError(f"Derivative node should have at least 2 successors, got {len(successors)}")
-                expr_node = predecessors[0]
-                variables = [successor for successor in successors if successor != min(successors, key=abs)]
-                expr = self.graph_to_expr(graph, expr_node)
-                vars_expressions = [self.graph_to_expr(graph, var_node) for var_node in variables]
-                return sp.Derivative(expr, *vars_expressions)
-
-            elif operator == 'Integral':
-                if len(predecessors) != 1:
-                    raise ValueError(f"Integral node should have exactly 1 predecessor, got {len(predecessors)}")
-                if len(successors) < 2:
-                    raise ValueError(f"Integral node should have at least 2 successors, got {len(successors)}")
-                expr_node = predecessors[0]
-                variables = [successor for successor in successors if successor != min(successors, key=abs)]
-                expr = self.graph_to_expr(graph, expr_node)
-                vars_expressions = [self.graph_to_expr(graph, var_node) for var_node in variables]
-                return sp.Integral(expr, *vars_expressions)
-
+            operator: str = node_data['operator']
+            if operator in operator_handlers:
+                return operator_handlers[operator]()
             else:
                 raise ValueError(f"Unsupported operator: {operator}")
 
@@ -490,7 +507,7 @@ class GraphToExprConverter:
         elif 'func' in node_data:
             if len(predecessors) != 1:
                 raise ValueError(f"func node should have exactly 1 predecessor, got {len(predecessors)}")
-            func = node_data['func']
+            func: callable = node_data['func']
             return func(self.graph_to_expr(graph, predecessors[0]))
 
         else:
