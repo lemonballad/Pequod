@@ -1,0 +1,47 @@
+2024-07-26 21:07:41,689 - UnitTestLogger - INFO - Set up ExprGenerator for testing
+2024-07-26 21:07:41,689 - UnitTestLogger - INFO - Tested generate_exponential method
+2024-07-26 21:07:41,690 - UnitTestLogger - INFO - Set up ExprGenerator for testing
+2024-07-26 21:07:41,690 - UnitTestLogger - INFO - Tested generate_hyperbolic method
+2024-07-26 21:07:41,690 - UnitTestLogger - INFO - Set up ExprGenerator for testing
+2024-07-26 21:07:41,690 - UnitTestLogger - INFO - Tested generate_polynomials method
+2024-07-26 21:07:41,691 - UnitTestLogger - INFO - Set up ExprGenerator for testing
+2024-07-26 21:07:41,691 - UnitTestLogger - INFO - Tested generate_trigonometric method
+2024-07-26 21:07:41,691 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,698 - UnitTestLogger - INFO - Tested add_edge method
+2024-07-26 21:07:41,698 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,698 - UnitTestLogger - INFO - Tested add_node method
+2024-07-26 21:07:41,698 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,698 - UnitTestLogger - INFO - Tested get_next_node method
+2024-07-26 21:07:41,699 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,699 - UnitTestLogger - INFO - Tested handle_add method
+2024-07-26 21:07:41,699 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,729 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,731 - UnitTestLogger - INFO - Tested handle_equality method
+2024-07-26 21:07:41,731 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,732 - UnitTestLogger - INFO - Tested handle_function method
+2024-07-26 21:07:41,732 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,732 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,732 - UnitTestLogger - INFO - Tested handle_mul method
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Tested handle_number method
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Tested handle_pow method
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Tested handle_symbol method
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Tested process_expr method
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Set up ExprGraphProcessor and DiGraph for testing
+2024-07-26 21:07:41,734 - UnitTestLogger - INFO - Tested reset_counters method
+2024-07-26 21:07:41,735 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,735 - UnitTestLogger - INFO - Tested graph_to_expr with addition node
+2024-07-26 21:07:41,742 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,743 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,743 - UnitTestLogger - INFO - Tested graph_to_expr with equality node
+2024-07-26 21:07:41,744 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,744 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,744 - UnitTestLogger - INFO - Tested graph_to_expr with multiplication node
+2024-07-26 21:07:41,744 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,744 - UnitTestLogger - INFO - Tested graph_to_expr with number node
+2024-07-26 21:07:41,745 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,754 - UnitTestLogger - INFO - Set up GraphToExprConverter and ExprGraphProcessor for testing
+2024-07-26 21:07:41,754 - UnitTestLogger - INFO - Tested graph_to_expr with symbol node

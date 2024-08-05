@@ -2,6 +2,7 @@ from itertools import chain, combinations, combinations_with_replacement, produc
 import numpy as np
 import networkx as nx
 import sympy as sp  # Symbolic mathematics for manipulating expressions
+from sympy.core.operations import AssocOp
 from typing import Tuple, Union
 
 
@@ -93,41 +94,27 @@ class ExprGraphProcessor:
         self.add_edge(_graph_, rhs_node, eq_node)
         return eq_node, _graph_
 
-    def handle_add(self, _expr_: sp.Add, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def handle_associative_operators(self, _expr_: AssocOp, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
         """
-        Handles addition expressions and adds them to the graph.
+        Handles addition and multiplication expressions and adds them to the graph.
 
         Args:
-            _expr_ (sp.Add): The addition expression.
+            _expr_ (AssocOp): The addition or multiplication expression.
             _graph_ (nx.DiGraph): The graph to which the nodes and edges will be added.
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
             Tuple[int, nx.DiGraph]: The node representing the addition and the updated graph.
         """
-        add_node = self.add_node(_graph_, side_flag, label='+', operator='+')
+        if isinstance(_expr_, sp.Add):
+            _label_ = _operator_ = '+'
+        else:
+            _label_ = _operator_ = '*'
+        operator_node = self.add_node(_graph_, side_flag, label=_label_, operator=_operator_)
         for term in _expr_.args:
             term_node, _graph_ = self.process_expr(term, _graph_, side_flag)
-            self.add_edge(_graph_, term_node, add_node)
-        return add_node, _graph_
-
-    def handle_mul(self, _expr_: sp.Mul, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
-        """
-        Handles multiplication expressions and adds them to the graph.
-
-        Args:
-            _expr_ (sp.Mul): The multiplication expression.
-            _graph_ (nx.DiGraph): The graph to which the nodes and edges will be added.
-            side_flag (int): Flag indicating side of the equation.
-
-        Returns:
-            Tuple[int, nx.DiGraph]: The node representing the multiplication and the updated graph.
-        """
-        mul_node = self.add_node(_graph_, side_flag, label='*', operator='*')
-        for term in _expr_.args:
-            term_node, _graph_ = self.process_expr(term, _graph_, side_flag)
-            self.add_edge(_graph_, term_node, mul_node)
-        return mul_node, _graph_
+            self.add_edge(_graph_, term_node, operator_node)
+        return operator_node, _graph_
 
     def handle_pow(self, _expr_: sp.Pow, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
         """
@@ -251,8 +238,8 @@ class ExprGraphProcessor:
         """
         handler_map = {
             sp.Equality: self.handle_equality,
-            sp.Add: self.handle_add,
-            sp.Mul: self.handle_mul,
+            sp.Add: self.handle_associative_operators,
+            sp.Mul: self.handle_associative_operators,
             sp.Pow: self.handle_pow,
             sp.Symbol: self.handle_symbol,
             sp.Integer: self.handle_number,
@@ -422,9 +409,9 @@ class GraphToExprConverter:
             sp.Basic: The corresponding sympy expression.
         """
 
-        def arithmatic_operator(_graph_: nx.DiGraph, _identity_: sp.Basic, _operator_: callable) -> sp.Basic:
+        def associative_operator(_graph_: nx.DiGraph, _identity_: sp.Basic, _operator_: callable) -> sp.Basic:
             """
-            Handle arithmetic operators such as addition and multiplication.
+            Handle associative operators such as addition and multiplication.
 
             Args:
                 _graph_ (nx.DiGraph): The graph representing the expression.
@@ -479,8 +466,8 @@ class GraphToExprConverter:
 
         operator_handlers = {
             '=': handle_equality,
-            '+': lambda: arithmatic_operator(graph, sp.S.Zero, sp.Add),
-            '*': lambda: arithmatic_operator(graph, sp.S.One, sp.Mul),
+            '+': lambda: associative_operator(graph, sp.S.Zero, sp.Add),
+            '*': lambda: associative_operator(graph, sp.S.One, sp.Mul),
             '**': handle_power,
             'Derivative': lambda: calculus_operator(graph, 'Derivative', sp.Derivative),
             'Integral': lambda: calculus_operator(graph, 'Integral', sp.Integral)
