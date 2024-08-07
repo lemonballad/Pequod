@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 import sympy as sp  # Symbolic mathematics for manipulating expressions
 from sympy.core.operations import AssocOp
-from typing import Tuple, Union
+from typing import Tuple, Union, Iterable
 
 
 class ExprGraphProcessor:
@@ -17,6 +17,7 @@ class ExprGraphProcessor:
         """
         self.node_count_neg = None
         self.node_count_pos = None
+        self.imaginary_part = None
         self.reset_counters()
 
     def reset_counters(self):
@@ -26,7 +27,16 @@ class ExprGraphProcessor:
         self.node_count_pos = 0  # Counter for positive node names
         self.node_count_neg = 0  # Counter for negative node names
 
-    def get_next_node(self, side_flag: int) -> int:
+    def set_imaginary_part(self, imaginary_part: complex):
+        """
+        Sets the imaginary part to be used in node names.
+
+        Args:
+            imaginary_part (complex): The imaginary part for node naming.
+        """
+        self.imaginary_part = imaginary_part
+
+    def get_next_node(self, side_flag: int) -> complex:
         """
         Determines the next node name based on the side of the expression.
 
@@ -34,31 +44,33 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation (-1: lhs, 1: rhs, 0: initial call).
 
         Returns:
-            int: The next node name.
+            str: The next node name.
         """
-        if side_flag == 0:
+        if side_flag == 1000:
             return 0
+        elif side_flag == 0:
+            return 0 + self.imaginary_part
         elif side_flag < 0:
             self.node_count_neg -= 1
-            return self.node_count_neg
+            return self.node_count_neg + self.imaginary_part
         else:
             self.node_count_pos += 1
-            return self.node_count_pos
+            return self.node_count_pos + self.imaginary_part
 
     @staticmethod
-    def add_edge(graph: nx.DiGraph, from_node: int, to_node: int, **attrs):
+    def add_edge(graph: nx.DiGraph, from_node: complex, to_node: complex, **attrs):
         """
         Adds an edge to the graph.
 
         Args:
             graph (nx.DiGraph): The graph to which the edge will be added.
-            from_node (int): The start node of the edge.
-            to_node (int): The end node of the edge.
+            from_node (str): The start node of the edge.
+            to_node (str): The end node of the edge.
             **attrs: Additional attributes for the edge.
         """
         graph.add_edge(from_node, to_node, **attrs)
 
-    def add_node(self, _graph_: nx.DiGraph, side_flag: int, label: str, **attrs) -> int:
+    def add_node(self, _graph_: nx.DiGraph, side_flag: int, label: str, **attrs) -> complex:
         """
         Adds a node to the graph with a unique name and label.
 
@@ -69,13 +81,68 @@ class ExprGraphProcessor:
             **attrs: Additional attributes for the node.
 
         Returns:
-            int: The name of the newly added node.
+            complex: The name of the newly added node.
         """
         node_name = self.get_next_node(side_flag)
-        _graph_.add_node(node_name, label=f'{node_name}: {label}', **attrs)
+        #_graph_.add_node(node_name, label=f'{node_name}: {label}', **attrs)
+        _graph_.add_node(node_name, label=f'{label}', **attrs)
         return node_name
 
-    def handle_equality(self, _expr_: sp.Equality, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def process_iterable(self, expressions: Iterable[sp.Basic]) -> nx.DiGraph:
+        """
+        Processes an iterable of sympy expressions and converts them into a NetworkX graph.
+
+        Args:
+            expressions (Iterable[sp.Basic]): The iterable of sympy expressions to process.
+
+        Returns:
+            nx.DiGraph: The resulting graph.
+        """
+        graph = nx.DiGraph()
+        central_node = self.add_node(graph, side_flag=1000, label=r'$\exists$')
+        if not np.iterable(expressions):
+            expressions = [expressions,]
+        for i, expr in enumerate(expressions):
+            imaginary_part = (i + 1) * 1j
+            self.set_imaginary_part(imaginary_part)
+            self.reset_counters()  # Reset counters for each new equation
+            eq_node, graph = self.process_expr(expr, graph, side_flag=0)
+            eq_name = f'Equation_{imaginary_part}j'
+            self.add_edge(graph, eq_node, central_node, label=eq_name)
+        return graph
+
+    def process_expr(self, _expr_: sp.Basic, _graph_: nx.DiGraph, side_flag: int) -> Tuple[complex, nx.DiGraph]:
+        """
+        Processes a sympy expression and converts it to a NetworkX graph.
+
+        Args:
+            _expr_ (sp.Basic): The sympy expression to process.
+            _graph_ (nx.DiGraph): The graph being generated.
+            side_flag (int): Flag indicating side of the equation (-1: lhs, 1: rhs, 0: initial call).
+
+        Returns:
+            Tuple[str, nx.DiGraph]: The outermost node and the updated graph.
+        """
+        handler_map = {
+            sp.Equality: self.handle_equality,
+            sp.Add: self.handle_associative_operators,
+            sp.Mul: self.handle_associative_operators,
+            sp.Pow: self.handle_pow,
+            sp.Symbol: self.handle_symbol,
+            sp.Integer: self.handle_number,
+            sp.Float: self.handle_number,
+            sp.Derivative: self.handle_calculus_operators,
+            sp.Integral: self.handle_calculus_operators,
+            sp.Expr: self.handle_function
+        }
+
+        for expr_type, handler in handler_map.items():
+            if isinstance(_expr_, expr_type):
+                return handler(_expr_, _graph_, side_flag)
+
+        raise ValueError(f"Unsupported expression type: {_expr_}")
+
+    def handle_equality(self, _expr_: sp.Equality, _graph_: nx.DiGraph, side_flag: int) -> Tuple[complex, nx.DiGraph]:
         """
         Handles equality expressions and adds them to the graph.
 
@@ -85,7 +152,7 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation (-1: lhs, 1: rhs).
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the equality and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the equality and the updated graph.
         """
         eq_node = self.add_node(_graph_, side_flag=0, label='=', operator='=')
         lhs_node, _graph_ = self.process_expr(_expr_.lhs, _graph_, side_flag=-1)
@@ -94,7 +161,8 @@ class ExprGraphProcessor:
         self.add_edge(_graph_, rhs_node, eq_node)
         return eq_node, _graph_
 
-    def handle_associative_operators(self, _expr_: AssocOp, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def handle_associative_operators(self, _expr_: AssocOp, _graph_: nx.DiGraph, side_flag: int)\
+            -> Tuple[complex, nx.DiGraph]:
         """
         Handles addition and multiplication expressions and adds them to the graph.
 
@@ -104,7 +172,7 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the addition and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the addition and the updated graph.
         """
         if isinstance(_expr_, sp.Add):
             _label_ = _operator_ = '+'
@@ -116,7 +184,7 @@ class ExprGraphProcessor:
             self.add_edge(_graph_, term_node, operator_node)
         return operator_node, _graph_
 
-    def handle_pow(self, _expr_: sp.Pow, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def handle_pow(self, _expr_: sp.Pow, _graph_: nx.DiGraph, side_flag: int) -> Tuple[complex, nx.DiGraph]:
         """
         Handles power expressions and adds them to the graph.
 
@@ -126,7 +194,7 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the power operation and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the power operation and the updated graph.
         """
         pow_node = self.add_node(_graph_, side_flag, label='**', operator='**')
         base_node, _graph_ = self.process_expr(_expr_.args[0], _graph_, side_flag)
@@ -135,7 +203,8 @@ class ExprGraphProcessor:
         self.add_edge(_graph_, exponent_node, pow_node)
         return pow_node, _graph_
 
-    def handle_symbol(self, _expr_: sp.Symbol, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def handle_symbol(self, _expr_: sp.Symbol, _graph_: nx.DiGraph, side_flag: int)\
+            -> Tuple[complex, nx.DiGraph]:
         """
         Handles symbol expressions and adds them to the graph.
 
@@ -145,70 +214,67 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the symbol and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the symbol and the updated graph.
         """
-        symbol_node = self.add_node(_graph_, side_flag, label=str(_expr_), symbol=_expr_)
+        symbol_node = self.add_node(_graph_, side_flag, label=str(_expr_), operator='symbol')
         return symbol_node, _graph_
 
-    def handle_number(self, _expr_: Union[sp.Integer, sp.Float], _graph_: nx.DiGraph, side_flag: int) -> Tuple[
-        int, nx.DiGraph]:
+    def handle_number(self, _expr_: Union[sp.Integer, sp.Float], _graph_: nx.DiGraph, side_flag: int)\
+            -> Tuple[complex, nx.DiGraph]:
         """
-        Handles number expressions and adds them to the graph.
+        Handles numeric expressions and adds them to the graph.
 
         Args:
-            _expr_ (Union[sp.Integer, sp.Float]): The number expression.
+            _expr_ (Union[sp.Integer, sp.Float]): The numeric expression.
             _graph_ (nx.DiGraph): The graph to which the nodes will be added.
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the number and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the number and the updated graph.
         """
-        number_node = self.add_node(_graph_, side_flag, label=str(_expr_), number=_expr_)
+        number_node = self.add_node(_graph_, side_flag, label=str(_expr_), operator='number')
         return number_node, _graph_
 
-    def handle_derivative(self, _expr_: sp.Derivative, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+    def handle_calculus_operators(self, _expr_: Union[sp.Integral, sp.Derivative], _graph_: nx.DiGraph, side_flag: int)\
+            -> Tuple[complex, nx.DiGraph]:
         """
-        Handles derivative expressions and adds them to the graph.
+        Handles integral and derivative expressions and adds them to the graph.
 
         Args:
-            _expr_ (sp.Derivative): The derivative expression.
+            _expr_ (Union[sp.Integral, sp.Derivative]): The integral/derivative expression.
             _graph_ (nx.DiGraph): The graph to which the nodes and edges will be added.
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the derivative and the updated graph.
+            Tuple[int, nx.DiGraph]: The node representing the integral/derivative and the updated graph.
         """
-        derivative_node = self.add_node(_graph_, side_flag, label=r'$ \hat{D} $', operator='Derivative')
+        if isinstance(_expr_, sp.Integral):
+            label = r'$ \hat{I} $'
+            operator = 'Integral'
+        else:
+            label = r'$ \hat{D} $'
+            operator = 'Derivative'
+
+        calculus_node = self.add_node(_graph_, side_flag, label=label, operator=operator)
+
+        # Process the expression inside the integral/derivative
         expr_node, _graph_ = self.process_expr(_expr_.args[0], _graph_, side_flag)
-        self.add_edge(_graph_, expr_node, derivative_node)
-        for iterm in _expr_.args[1:]:
-            var_node, _graph_ = self.process_expr(iterm[0], _graph_, side_flag)
-            self.add_edge(_graph_, derivative_node, var_node, variable=iterm[0])
-        return derivative_node, _graph_
+        self.add_edge(_graph_, expr_node, calculus_node)
 
-    def handle_integral(self, _expr_: sp.Integral, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
+        # Process the variables (tuples) of the integral/derivative
+        for var in _expr_.args[1:]:
+            if len(var) == 1:
+                num_iter = 0
+            else:
+                num_iter = var[1]
+            for _iter_ in range(num_iter):
+                var_node, _graph_ = self.process_expr(var[0], _graph_, side_flag)
+                self.add_edge(_graph_, calculus_node, var_node, variable=var[0])
+        return calculus_node, _graph_
+
+    def handle_function(self, _expr_: sp.Expr, _graph_: nx.DiGraph, side_flag: int) -> Tuple[complex, nx.DiGraph]:
         """
-        Handles integral expressions and adds them to the graph.
-
-        Args:
-            _expr_ (sp.Integral): The integral expression.
-            _graph_ (nx.DiGraph): The graph to which the nodes and edges will be added.
-            side_flag (int): Flag indicating side of the equation.
-
-        Returns:
-            Tuple[int, nx.DiGraph]: The node representing the integral and the updated graph.
-        """
-        integral_node = self.add_node(_graph_, side_flag, label=r'$ \hat{I} $', operator='Integral')
-        expr_node, _graph_ = self.process_expr(_expr_.args[0], _graph_, side_flag)
-        self.add_edge(_graph_, expr_node, integral_node)
-        for iterm in _expr_.args[1:]:
-            var_node, _graph_ = self.process_expr(iterm[0], _graph_, side_flag)
-            self.add_edge(_graph_, integral_node, var_node, variable=iterm[0])
-        return integral_node, _graph_
-
-    def handle_function(self, _expr_: sp.Expr, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
-        """
-        Handles function expressions and adds them to the graph.
+        Handles general function expressions and adds them to the graph.
 
         Args:
             _expr_ (sp.Expr): The function expression.
@@ -216,44 +282,14 @@ class ExprGraphProcessor:
             side_flag (int): Flag indicating side of the equation.
 
         Returns:
-            Tuple[int, nx.DiGraph]: The node representing the function and the updated graph.
+            Tuple[str, nx.DiGraph]: The node representing the function and the updated graph.
         """
-        func_node = self.add_node(_graph_, side_flag, label=str(_expr_.func), func=_expr_.func)
+        func_node = self.add_node(_graph_, side_flag, label=str(type(_expr_).__name__), operator='function',
+                                  func=_expr_.func)
         for arg in _expr_.args:
             arg_node, _graph_ = self.process_expr(arg, _graph_, side_flag)
             self.add_edge(_graph_, arg_node, func_node)
         return func_node, _graph_
-
-    def process_expr(self, _expr_: sp.Basic, _graph_: nx.DiGraph, side_flag: int) -> Tuple[int, nx.DiGraph]:
-        """
-        Processes a sympy expression and converts it to a NetworkX graph.
-
-        Args:
-            _expr_ (sp.Basic): The sympy expression to process.
-            _graph_ (nx.DiGraph): The graph being generated.
-            side_flag (int): Flag indicating side of the equation (-1: lhs, 1: rhs, 0: initial call).
-
-        Returns:
-            Tuple[int, nx.DiGraph]: The outermost node and the updated graph.
-        """
-        handler_map = {
-            sp.Equality: self.handle_equality,
-            sp.Add: self.handle_associative_operators,
-            sp.Mul: self.handle_associative_operators,
-            sp.Pow: self.handle_pow,
-            sp.Symbol: self.handle_symbol,
-            sp.Integer: self.handle_number,
-            sp.Float: self.handle_number,
-            sp.Derivative: self.handle_derivative,
-            sp.Integral: self.handle_integral,
-            sp.Expr: self.handle_function
-        }
-
-        for expr_type, handler in handler_map.items():
-            if isinstance(_expr_, expr_type):
-                return handler(_expr_, _graph_, side_flag)
-
-        raise ValueError(f"Unsupported expression type: {_expr_}")
 
 
 class ExprGenerator:
@@ -308,14 +344,14 @@ class ExprGenerator:
         # Generate single variable polynomials
         for expr in self.sub_expressions:
             for degree in range(1, max_degree + 1):
-                poly_list.append(expr**degree)
+                poly_list.append(expr ** degree)
 
         if all_terms:
             if cross_terms:
                 # Generate cross terms without exceeding max_degree
                 for degrees in product(range(max_degree + 1), repeat=len(self.sub_expressions)):
                     if 0 < sum(degrees) <= max_degree:
-                        term = sp.Mul(*[expr**deg for expr, deg in zip(self.sub_expressions, degrees)])
+                        term = sp.Mul(*[expr ** deg for expr, deg in zip(self.sub_expressions, degrees)])
                         poly_list.append(term)
             else:
                 for degree in range(1, max_degree + 1):
@@ -355,13 +391,13 @@ class ExprGenerator:
         Generate a list of sympy exponential/logarithmic expressions
         """
         exp_list = []
-        func_list = [sp.exp, sp.LambertW ,sp.log]
+        func_list = [sp.exp, sp.LambertW, sp.log]
         for _expr_ in self.sub_expressions:
             for func in func_list:
                 exp_list.append(func(_expr_))
             for __expr__ in self.sub_expressions:
-                exp_list.append(_expr_**__expr__)
-            exp_list.append(2**_expr_)
+                exp_list.append(_expr_ ** __expr__)
+            exp_list.append(2 ** _expr_)
         self.exp_list = exp_list
 
     def get_polynomials(self):
@@ -391,53 +427,30 @@ class ExprGenerator:
 
 class GraphToExprConverter:
     """
-    A class to convert a NetworkX graph back into a sympy expression.
+    A class to convert a NetworkX graph back into sympy expressions.
     """
 
     def __init__(self):
         pass
 
-    def graph_to_expr(self, graph: nx.DiGraph, node: int) -> sp.Basic:
+    def graph_to_expr(self, graph: nx.DiGraph, node: complex) -> sp.Basic:
         """
-        Converts a graph back into a sympy expression.
+        Converts a graph back into sympy expressions.
 
         Args:
-            graph (nx.DiGraph): The graph representing the expression.
-            node (int): The current node to process.
+            graph (nx.DiGraph): The graph representing the expressions.
+            node (complex): The current node to process.
 
         Returns:
             sp.Basic: The corresponding sympy expression.
         """
-
         def associative_operator(_graph_: nx.DiGraph, _identity_: sp.Basic, _operator_: callable) -> sp.Basic:
-            """
-            Handle associative operators such as addition and multiplication.
-
-            Args:
-                _graph_ (nx.DiGraph): The graph representing the expression.
-                _identity_ (sp.Basic): The identity element for the operator.
-                _operator_ (callable): The sympy function for the operator (e.g., sp.Add, sp.Mul).
-
-            Returns:
-                sp.Basic: The sympy expression for the arithmetic operation.
-            """
             if len(predecessors) == 0:
                 return _identity_
             terms = [self.graph_to_expr(_graph_, predecessor) for predecessor in predecessors]
             return _operator_(*terms)
 
         def calculus_operator(_graph_: nx.DiGraph, str_operator: str, _operator_: callable) -> sp.Basic:
-            """
-            Handle calculus operators such as derivatives and integrals.
-
-            Args:
-                _graph_ (nx.DiGraph): The graph representing the expression.
-                str_operator (str): The string name of the operator.
-                _operator_ (callable): The sympy function for the operator (e.g., sp.Derivative, sp.Integral).
-
-            Returns:
-                sp.Basic: The sympy expression for the calculus operation.
-            """
             if len(predecessors) != 1:
                 raise ValueError(f"{str_operator} node should have exactly 1 predecessor, got {len(predecessors)}")
             if len(successors) < 2:
@@ -475,23 +488,23 @@ class GraphToExprConverter:
 
         node_data: dict = graph.nodes[node]
         label: str = node_data.get('label', '')
-        predecessors: list[int] = list(graph.predecessors(node))
-        successors: list[int] = list(graph.successors(node))
+        predecessors: list[complex] = list(graph.predecessors(node))
+        successors: list[complex] = list(graph.successors(node))
 
-        if 'operator' in node_data:
+        if node_data['operator'] in operator_handlers.keys():
             operator: str = node_data['operator']
             if operator in operator_handlers:
                 return operator_handlers[operator]()
             else:
                 raise ValueError(f"Unsupported operator: {operator}")
 
-        elif 'symbol' in node_data:
-            return node_data['symbol']
+        elif node_data['operator'] == 'symbol':
+            return sp.Symbol(label)
 
-        elif 'number' in node_data:
-            return node_data['number']
+        elif node_data['operator'] == 'number':
+            return sp.Number(label)
 
-        elif 'func' in node_data:
+        elif node_data['operator'] == 'function':
             if len(predecessors) != 1:
                 raise ValueError(f"func node should have exactly 1 predecessor, got {len(predecessors)}")
             func: callable = node_data['func']
@@ -499,4 +512,21 @@ class GraphToExprConverter:
 
         else:
             raise ValueError(f"Unsupported node data: {node_data}")
-        
+
+    def convert_graph(self, graph: nx.DiGraph) -> list[sp.Basic]:
+        """
+        Converts the entire graph containing multiple equations back into a list of sympy expressions.
+
+        Args:
+            graph (nx.DiGraph): The graph representing the expressions.
+
+        Returns:
+            list[sp.Basic]: The list of corresponding sympy expressions.
+        """
+        central_node = 0
+        eq_nodes = list(graph.predecessors(central_node))
+        expressions = []
+        for eq_node in eq_nodes:
+            expr = self.graph_to_expr(graph, eq_node)
+            expressions.append(expr)
+        return expressions
