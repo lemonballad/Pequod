@@ -1,4 +1,5 @@
 from itertools import chain, combinations, combinations_with_replacement, product
+import matplotlib.pyplot as plt
 import numpy as np
 import networkx as nx
 import sympy as sp  # Symbolic mathematics for manipulating expressions
@@ -46,9 +47,9 @@ class ExprGraphProcessor:
         Returns:
             str: The next node name.
         """
-        if side_flag == 1000:
+        if self.imaginary_part is None:
             return 0
-        elif side_flag == 0:
+        if side_flag == 0:
             return 0 + self.imaginary_part
         elif side_flag < 0:
             self.node_count_neg -= 1
@@ -99,11 +100,11 @@ class ExprGraphProcessor:
             nx.DiGraph: The resulting graph.
         """
         graph = nx.DiGraph()
-        central_node = self.add_node(graph, side_flag=1000, label=r'$\exists$')
+        central_node = self.add_node(graph, side_flag=0, label=r'$\exists$')
         if not np.iterable(expressions):
-            expressions = [expressions,]
-        for i, expr in enumerate(expressions):
-            imaginary_part = (i + 1) * 1j
+            expressions = [expressions, ]
+        for expr_index, expr in enumerate(expressions):
+            imaginary_part = (expr_index + 1) * 1j
             self.set_imaginary_part(imaginary_part)
             self.reset_counters()  # Reset counters for each new equation
             eq_node, graph = self.process_expr(expr, graph, side_flag=0)
@@ -154,14 +155,15 @@ class ExprGraphProcessor:
         Returns:
             Tuple[str, nx.DiGraph]: The node representing the equality and the updated graph.
         """
-        eq_node = self.add_node(_graph_, side_flag=0, label='=', operator='=')
+        attributes = {'function': None, 'operator': '=', 'parameter': None, 'value': None, 'variable': None}
+        eq_node = self.add_node(_graph_, side_flag=0, label='=', **attributes)
         lhs_node, _graph_ = self.process_expr(_expr_.lhs, _graph_, side_flag=-1)
         rhs_node, _graph_ = self.process_expr(_expr_.rhs, _graph_, side_flag=1)
         self.add_edge(_graph_, lhs_node, eq_node)
         self.add_edge(_graph_, rhs_node, eq_node)
         return eq_node, _graph_
 
-    def handle_associative_operators(self, _expr_: AssocOp, _graph_: nx.DiGraph, side_flag: int)\
+    def handle_associative_operators(self, _expr_: AssocOp, _graph_: nx.DiGraph, side_flag: int) \
             -> Tuple[complex, nx.DiGraph]:
         """
         Handles addition and multiplication expressions and adds them to the graph.
@@ -178,7 +180,9 @@ class ExprGraphProcessor:
             _label_ = _operator_ = '+'
         else:
             _label_ = _operator_ = '*'
-        operator_node = self.add_node(_graph_, side_flag, label=_label_, operator=_operator_)
+        attributes = {'function': _operator_, 'operator': _operator_, 'parameter': None, 'value': None,
+                      'variable': None}
+        operator_node = self.add_node(_graph_, side_flag, label=_label_, **attributes)
         for term in _expr_.args:
             term_node, _graph_ = self.process_expr(term, _graph_, side_flag)
             self.add_edge(_graph_, term_node, operator_node)
@@ -196,14 +200,15 @@ class ExprGraphProcessor:
         Returns:
             Tuple[str, nx.DiGraph]: The node representing the power operation and the updated graph.
         """
-        pow_node = self.add_node(_graph_, side_flag, label='**', operator='**')
+        attributes = {'function': 'POW', 'operator': '**', 'parameter': None, 'value': None, 'variable': None}
+        pow_node = self.add_node(_graph_, side_flag, label='**', **attributes)
         base_node, _graph_ = self.process_expr(_expr_.args[0], _graph_, side_flag)
         self.add_edge(_graph_, pow_node, base_node)
         exponent_node, _graph_ = self.process_expr(_expr_.args[1], _graph_, side_flag)
         self.add_edge(_graph_, exponent_node, pow_node)
         return pow_node, _graph_
 
-    def handle_symbol(self, _expr_: sp.Symbol, _graph_: nx.DiGraph, side_flag: int)\
+    def handle_symbol(self, _expr_: sp.Symbol, _graph_: nx.DiGraph, side_flag: int) \
             -> Tuple[complex, nx.DiGraph]:
         """
         Handles symbol expressions and adds them to the graph.
@@ -216,10 +221,11 @@ class ExprGraphProcessor:
         Returns:
             Tuple[str, nx.DiGraph]: The node representing the symbol and the updated graph.
         """
-        symbol_node = self.add_node(_graph_, side_flag, label=str(_expr_), operator='symbol')
+        attributes = {'function': None, 'operator': _expr_, 'parameter': None, 'value': None, 'variable': _expr_}
+        symbol_node = self.add_node(_graph_, side_flag, label=str(_expr_), **attributes)
         return symbol_node, _graph_
 
-    def handle_number(self, _expr_: Union[sp.Integer, sp.Float], _graph_: nx.DiGraph, side_flag: int)\
+    def handle_number(self, _expr_: Union[sp.Integer, sp.Float], _graph_: nx.DiGraph, side_flag: int) \
             -> Tuple[complex, nx.DiGraph]:
         """
         Handles numeric expressions and adds them to the graph.
@@ -232,10 +238,11 @@ class ExprGraphProcessor:
         Returns:
             Tuple[str, nx.DiGraph]: The node representing the number and the updated graph.
         """
-        number_node = self.add_node(_graph_, side_flag, label=str(_expr_), operator='number')
+        attributes = {'function': None, 'operator': _expr_, 'parameter': None, 'value': _expr_, 'variable': None}
+        number_node = self.add_node(_graph_, side_flag, label=str(_expr_), **attributes)
         return number_node, _graph_
 
-    def handle_calculus_operators(self, _expr_: Union[sp.Integral, sp.Derivative], _graph_: nx.DiGraph, side_flag: int)\
+    def handle_calculus_operators(self, _expr_: Union[sp.Integral, sp.Derivative], _graph_: nx.DiGraph, side_flag: int) \
             -> Tuple[complex, nx.DiGraph]:
         """
         Handles integral and derivative expressions and adds them to the graph.
@@ -249,13 +256,14 @@ class ExprGraphProcessor:
             Tuple[int, nx.DiGraph]: The node representing the integral/derivative and the updated graph.
         """
         if isinstance(_expr_, sp.Integral):
-            label = r'$ \hat{I} $'
-            operator = 'Integral'
+            _label_ = r'$ \hat{I} $'
+            _operator_ = 'Integral'
         else:
-            label = r'$ \hat{D} $'
-            operator = 'Derivative'
+            _label_ = r'$ \hat{D} $'
+            _operator_ = 'Derivative'
 
-        calculus_node = self.add_node(_graph_, side_flag, label=label, operator=operator)
+        attributes = {'function': None, 'operator': _operator_, 'parameter': None, 'value': None, 'variable': None}
+        calculus_node = self.add_node(_graph_, side_flag, label=_label_, **attributes)
 
         # Process the expression inside the integral/derivative
         expr_node, _graph_ = self.process_expr(_expr_.args[0], _graph_, side_flag)
@@ -284,7 +292,9 @@ class ExprGraphProcessor:
         Returns:
             Tuple[str, nx.DiGraph]: The node representing the function and the updated graph.
         """
-        func_node = self.add_node(_graph_, side_flag, label=str(type(_expr_).__name__), operator='function',
+        attributes = {'function': type(_expr_), 'operator': type(_expr_), 'parameter': None, 'value': None,
+                      'variable': None}
+        func_node = self.add_node(_graph_, side_flag, label=str(type(_expr_).__name__), **attributes,
                                   func=_expr_.func)
         for arg in _expr_.args:
             arg_node, _graph_ = self.process_expr(arg, _graph_, side_flag)
@@ -444,6 +454,7 @@ class GraphToExprConverter:
         Returns:
             sp.Basic: The corresponding sympy expression.
         """
+
         def associative_operator(_graph_: nx.DiGraph, _identity_: sp.Basic, _operator_: callable) -> sp.Basic:
             if len(predecessors) == 0:
                 return _identity_
@@ -498,13 +509,16 @@ class GraphToExprConverter:
             else:
                 raise ValueError(f"Unsupported operator: {operator}")
 
-        elif node_data['operator'] == 'symbol':
+        elif node_data['parameter'] is not None:
             return sp.Symbol(label)
 
-        elif node_data['operator'] == 'number':
+        elif node_data['variable'] is not None:
+            return sp.Symbol(label)
+
+        elif node_data['value'] is not None:
             return sp.Number(label)
 
-        elif node_data['operator'] == 'function':
+        elif node_data['function'] is not None:
             if len(predecessors) != 1:
                 raise ValueError(f"func node should have exactly 1 predecessor, got {len(predecessors)}")
             func: callable = node_data['func']
@@ -530,3 +544,75 @@ class GraphToExprConverter:
             expr = self.graph_to_expr(graph, eq_node)
             expressions.append(expr)
         return expressions
+
+
+def radial_layout(_graph_, _root_node_=0):
+    """
+    Creates a radial layout for the graph with the root node in the center.
+
+    Args:
+        _graph_ (nx.DiGraph): The graph to layout.
+        _root_node_ (complex): The root node which should be at the center.
+
+    Returns:
+        dict: A dictionary with node positions.
+    """
+    _pos_ = {}
+    _pos_[0] = [0, 0]  # Place root node at the center
+    equals_nodes = [node for node, data in _graph_.nodes(data=True) if data.get('operator') == '=']
+
+    if len(equals_nodes) == 1:
+        _pos_[equals_nodes[0]] = [1, 0]
+        equation_nodes = [node for node, data in _graph_.nodes(data=True) if np.imag(node) == 1 and np.real(node) != 0]
+        _pos_.update(nx.circular_layout(equation_nodes, center=_pos_[equals_nodes[0]], scale=0.75))
+    else:
+        _pos_.update(nx.circular_layout(equals_nodes, center=_pos_[0]))
+        for equals_node in equals_nodes:
+            equation_nodes = [node for node, data in _graph_.nodes(data=True) if np.imag(node) == np.imag(equals_node)
+                              and np.real(node) != 0]
+            _pos_.update(nx.circular_layout(equation_nodes, center=_pos_[equals_node], scale=0.75))
+    return _pos_
+
+
+def draw_graph(_graph_, _pos_, _labels_):
+    """
+    Draw the graph with a specified color scheme and optional black background.
+
+    Args:
+        _graph_ (nx.DiGraph): The graph to draw.
+        _pos_ (dict): Node positions.
+        _labels_ (dict): Node labels.
+    """
+    # Color Universal Design (CUD) palette
+    cud_colors = {
+        'default': '#E69F00',  # Orange
+        'exists': '#56B4E9',  # Sky Blue
+        'symbol': '#009E73',  # Bluish Green
+        'number': '#F0E442',  # Yellow
+        'operator': '#0072B2',  # Blue
+        'function': '#D55E00',  # Vermilion
+        '=': '#CC79A7'  # Reddish Purple
+    }
+
+    node_colors = []
+    for node, data in _graph_.nodes(data=True):
+        if data.get('label') == r'$\exists$':
+            node_colors.append(cud_colors['exists'])
+        elif data.get('operator') == '=':
+            node_colors.append(cud_colors['='])
+        elif data.get('operator') == 'symbol':
+            node_colors.append(cud_colors['symbol'])
+        elif data.get('operator') == 'number':
+            node_colors.append(cud_colors['number'])
+        elif data.get('operator') in ['+', '*', '**']:
+            node_colors.append(cud_colors['operator'])
+        elif data.get('operator') == 'function':
+            node_colors.append(cud_colors['function'])
+        else:
+            node_colors.append(cud_colors['default'])
+
+    plt.figure(figsize=(12, 12))
+
+    nx.draw(_graph_, pos=_pos_, with_labels=True, labels=_labels_, arrows=True, font_size=10,
+            node_size=2000, node_color=node_colors)
+    plt.show()
